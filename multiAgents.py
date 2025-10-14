@@ -95,9 +95,9 @@ class ReflexAgent(Agent):
         ghostDistances = [util.manhattanDist(newPos, ghost.getPosition()) for ghost in newGhostStates]
         nearestGhostDistance = min(ghostDistances) if ghostDistances else 0
 
-        # [3] Capsule
-        capsuleDistances = [util.manhattanDist(newPos, capsule) for capsule in successorGameState.getCapsules()]
-        nearestCapsuleDistance = min(capsuleDistances) if capsuleDistances else 0
+        # [3] Pellet
+        pelletDistances = [util.manhattanDist(newPos, pellet) for pellet in successorGameState.getPellets()]
+        nearestPelletDistance = min(pelletDistances) if pelletDistances else 0
 
         GHOST_DIST_BOUND = 3
         CAPSULE_DIST_BOUND = 3
@@ -105,27 +105,28 @@ class ReflexAgent(Agent):
         weights = {
             'distanceToFood': -0.01,
             'distanceToGhost': -100 if nearestGhostDistance <= GHOST_DIST_BOUND else 0,
-            'distanceToGhostScared': 70 if nearestGhostDistance <= GHOST_DIST_BOUND and any(newScaredTimes) else 0,
-            'distanceToCapsule': 30 if nearestCapsuleDistance <= CAPSULE_DIST_BOUND else 0
+            'distanceToScaredGhost': 70 if nearestGhostDistance <= GHOST_DIST_BOUND and any(newScaredTimes) else 0,
+            'distanceToPellet': 30 if nearestPelletDistance <= CAPSULE_DIST_BOUND else 0
         }
 
         finalScore = (
             successorGameState.getScore()
             + weights['distanceToFood'] * nearestFoodDistance
             + weights['distanceToGhost'] * (GHOST_DIST_BOUND - nearestGhostDistance)
-            + weights['distanceToGhostScared'] * nearestGhostDistance
-            + weights['distanceToCapsule'] * (CAPSULE_DIST_BOUND - nearestCapsuleDistance)
+            + weights['distanceToScaredGhost'] * nearestGhostDistance
+            + weights['distanceToPellet'] * (CAPSULE_DIST_BOUND - nearestPelletDistance)
         )
 
         # print(f"<{action[0]}> ", end="")
         # print(f"[GetScore] {successorGameState.getScore()} / ", end="")
         # print(f"[Food] {weights['distanceToFood']} * {nearestFoodDistance} / ", end="")
         # print(f"[Ghost] {weights['distanceToGhost']} * {nearestGhostDistance} / ", end="")
-        # print(f"[Capsule] {weights['distanceToCapsule']} / {nearestCapsuleDistance} / ", end="")
+        # print(f"[Pellet] {weights['distanceToPellet']} / {nearestPelletDistance} / ", end="")
 
         # print(f"[Score] {finalScore}")
 
         return finalScore
+
 
 def scoreEvaluationFunction(currentGameState: GameState):
     """
@@ -136,6 +137,7 @@ def scoreEvaluationFunction(currentGameState: GameState):
     (not reflex agents).
     """
     return currentGameState.getScore()
+
 
 class MultiAgentSearchAgent(Agent):
     """
@@ -163,6 +165,37 @@ class MinimaxAgent(MultiAgentSearchAgent):
     Your minimax agent (question 2)
     """
 
+    def minimax(self, state, depth, agentIndex):
+
+        # [1] Terminal state
+        if depth == 0 or state.isWin() or state.isLose():
+            return self.evaluationFunction(state)
+
+        # [2] Pacman's turn (max)
+        if agentIndex == 0:
+            v = NEG_INFINITY
+
+            for action in state.getLegalActions(0):
+                successor = state.generateSuccessor(0, action)
+
+                # Start from the first ghost
+                v = max(v, self.minimax(successor, depth, 1))
+
+            return v
+
+        # [3] Ghost's turn (min)
+        else:
+            v = INFINITY
+            for action in state.getLegalActions(agentIndex):
+                successor = state.generateSuccessor(agentIndex, action)
+
+                # Last ghost: Go to next depth / Else: Go to next ghost
+                nextDepth = depth - 1 if agentIndex == state.getNumAgents() - 1 else depth
+                nextAgentIndex = (agentIndex + 1) % state.getNumAgents()
+                v = min(v, self.minimax(successor, nextDepth, nextAgentIndex))
+
+            return v
+
     def getAction(self, gameState: GameState):
         """
         Returns the minimax action from the current gameState using self.depth
@@ -187,7 +220,6 @@ class MinimaxAgent(MultiAgentSearchAgent):
         Returns whether or not the game state is a losing state
         """
 
-
         """
         Pacman이 현재 state에서 움직이기 시작 (depth = self.depth)
         1. Pacman이 움직임 (depth = self.depth)
@@ -202,45 +234,18 @@ class MinimaxAgent(MultiAgentSearchAgent):
         -> 종료
         """
 
-        def minimax(state, depth, agentIndex):
-
-            # [1] Terminal state
-            if depth == 0 or state.isWin() or state.isLose():
-                return self.evaluationFunction(state)
-
-            # [2] Pacman's turn (max)
-            if agentIndex == 0:
-                v = NEG_INFINITY
-                for action in state.getLegalActions(0):
-                    successor = state.generateSuccessor(0, action)
-
-                    # Start from the first ghost
-                    v = max(v, minimax(successor, depth, 1))
-                return v
-
-            # [3] Ghost's turn (min)
-            else:
-                v = INFINITY
-                for action in state.getLegalActions(agentIndex):
-                    successor = state.generateSuccessor(agentIndex, action)
-
-                    # Last ghost: Go to next depth
-                    if agentIndex == state.getNumAgents() - 1:
-                        v = min(v, minimax(successor, depth - 1, 0))
-                    # Not last ghost: Next ghost
-                    else:
-                        v = min(v, minimax(successor, depth, agentIndex + 1))
-
-                return v
+        # Randomize legal actions
+        legalActions = gameState.getLegalActions(0)
+        random.shuffle(legalActions)
 
         # Find the optimal action for Pacman
         optimalAction = None
         optimalScore = NEG_INFINITY
-        for action in gameState.getLegalActions(0):
+        for action in legalActions:
             successor = gameState.generateSuccessor(0, action)
 
             # Start minimax from the first ghost at depth == self.depth
-            score = minimax(successor, self.depth, 1)
+            score = self.minimax(successor, self.depth, 1)
 
             if score > optimalScore:
                 optimalScore = score
@@ -249,63 +254,114 @@ class MinimaxAgent(MultiAgentSearchAgent):
         return optimalAction
 
 
-    def evaluationFunction(gameState: GameState):
-
-        score = gameState.getScore()
-        pacmanPos = gameState.getPacmanPosition()
-        foodList = gameState.getFood().asList()
-        ghostStates = gameState.getGhostStates()
-        capsuleList = gameState.getCapsules()
-
-        weights = {
-            'distanceToFood': -1,
-            'distanceToGhost': -100,
-            'distanceToGhostScared': 70,
-            'distanceToCapsule': 30
-        }
-
-        # [1] Distance to the nearest food
-        if foodList:
-            foodDistances = [util.manhattanDist(pacmanPos, food) for food in foodList]
-            nearestFoodDistance = min(foodDistances)
-            score += weights['distanceToFood'] * nearestFoodDistance
-
-        # [2] Distance to the nearest ghost
-        for ghost in ghostStates:
-            ghostPos = ghost.getPosition()
-            ghostDistance = util.manhattanDist(pacmanPos, ghostPos)
-            if ghost.scaredTimer > 0:
-                score += weights['distanceToGhostScared'] * ghostDistance
-            elif ghostDistance <= GHOST_DIST_BOUND:
-                score += weights['distanceToGhost'] * ghostDistance
-
-        # [3] Distance to the nearest capsule
-        if capsuleList:
-            capsuleDistances = [util.manhattanDist(pacmanPos, capsule) for capsule in capsuleList]
-            nearestCapsuleDistance = min(capsuleDistances)
-
-            if nearestCapsuleDistance <= CAPSULE_DIST_BOUND:
-                score += weights['distanceToCapsule'] * nearestCapsuleDistance
-
-        return score
-
-
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
     Your minimax agent with alpha-beta pruning (question 3)
     """
 
+    def alphaBetaPruning(self, state, depth, agentIndex, alpha, beta):
+
+        # [1] Terminal state
+        if depth == 0 or state.isWin() or state.isLose():
+            return self.evaluationFunction(state)
+
+        # [2] Pacman's turn (max - alpha)
+        if agentIndex == 0:
+            v = NEG_INFINITY
+            for action in state.getLegalActions(0):
+                successor = state.generateSuccessor(0, action)
+
+                # Start from the first ghost
+                v = max(v, self.alphaBetaPruning(successor, depth, 1, alpha, beta))
+
+                if v > beta:
+                    return v
+
+                alpha = max(alpha, v)
+            return v
+
+        # [3] Ghost's turn (min - beta)
+        else:
+            v = INFINITY
+            for action in state.getLegalActions(agentIndex):
+                successor = state.generateSuccessor(agentIndex, action)
+
+                # Last ghost: Go to next depth / Else: Go to next ghost
+                nextDepth = depth - 1 if agentIndex == state.getNumAgents() - 1 else depth
+                nextAgentIndex = (agentIndex + 1) % state.getNumAgents()
+                v = min(v, self.alphaBetaPruning(successor, nextDepth, nextAgentIndex, alpha, beta))
+
+                if v < alpha:
+                    return v
+
+                beta = min(beta, v)
+
+            return v
+
     def getAction(self, gameState: GameState):
         """
         Returns the minimax action using self.depth and self.evaluationFunction
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Find the optimal action for Pacman
+        optimalAction = None
+        optimalScore = NEG_INFINITY
+        alpha = NEG_INFINITY
+        beta = INFINITY
+
+        for action in gameState.getLegalActions(0):
+            successor = gameState.generateSuccessor(0, action)
+
+            # Start alpha-beta pruning from the first ghost at depth == self.depth
+            v = self.alphaBetaPruning(successor, self.depth, 1, alpha, beta)
+
+            if v > optimalScore:
+                optimalScore = v
+                optimalAction = action
+
+            alpha = max(alpha, v)
+
+        return optimalAction
+
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
       Your expectimax agent (question 4)
     """
+
+    def expectimax(self, state, depth, agentIndex):
+
+        # [1] Terminal state
+        if depth == 0 or state.isWin() or state.isLose():
+            return self.evaluationFunction(state)
+
+        # [2] Pacman's turn (max)
+        if agentIndex == 0:
+            v = NEG_INFINITY
+
+            for action in state.getLegalActions(0):
+                successor = state.generateSuccessor(0, action)
+
+                # Start from the first ghost
+                v = max(v, self.expectimax(successor, depth, 1))
+
+            return v
+
+        # [3] Ghost's turn (exp)
+        else:
+            v = 0
+
+            for action in state.getLegalActions(agentIndex):
+                successor = state.generateSuccessor(agentIndex, action)
+
+                # Last ghost: Go to next depth / Else: Go to next ghost
+                nextDepth = depth - 1 if agentIndex == state.getNumAgents() - 1 else depth
+                nextAgentIndex = (agentIndex + 1) % state.getNumAgents()
+
+                p = 1 / len(state.getLegalActions(agentIndex)) # Uniformly at random
+                v += p * self.expectimax(successor, nextDepth, nextAgentIndex)
+
+            return v
 
     def getAction(self, gameState: GameState):
         """
@@ -314,8 +370,26 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         All ghosts should be modeled as choosing uniformly at random from their
         legal moves.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Randomize legal actions to avoid bias back and forth
+        legalActions = gameState.getLegalActions(0)
+        random.shuffle(legalActions)
+
+        # Find the optimal action for Pacman
+        optimalAction = None
+        optimalScore = NEG_INFINITY
+        for action in legalActions:
+            successor = gameState.generateSuccessor(0, action)
+
+            # Start expectimax from the first ghost at depth == self.depth
+            score = self.expectimax(successor, self.depth, 1)
+
+            if score > optimalScore:
+                optimalScore = score
+                optimalAction = action
+
+        return optimalAction
+
 
 def betterEvaluationFunction(currentGameState: GameState):
     """
@@ -324,8 +398,47 @@ def betterEvaluationFunction(currentGameState: GameState):
 
     DESCRIPTION: <write something here so we know what you did>
     """
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+
+    score = currentGameState.getScore()
+    pacmanPos = currentGameState.getPacmanPosition()
+    foodList = currentGameState.getFood().asList()
+    ghostStates = currentGameState.getGhostStates()
+    pelletList = currentGameState.getPellets()
+
+    weights = {
+        'distanceToFood': -0.1,
+        'distanceToGhost': -100,
+        'distanceToScaredGhost': 70,
+        'distanceToPellet': 30
+    }
+
+    # [1] Distance to the nearest food
+    if foodList:
+        foodDistances = [util.manhattanDist(pacmanPos, food) for food in foodList]
+        nearestFoodDistance = min(foodDistances)
+        score += weights['distanceToFood'] * nearestFoodDistance
+
+    # [2] Distance to the nearest ghost
+    for ghost in ghostStates:
+        ghostPos = ghost.getPosition()
+        ghostDistance = util.manhattanDist(pacmanPos, ghostPos)
+
+        # Not afraid of scared ghosts
+        if ghost.scaredTimer > 0:
+            score += weights['distanceToScaredGhost'] * ghostDistance
+        elif ghostDistance <= GHOST_DIST_BOUND:
+            score += weights['distanceToGhost'] * ghostDistance
+
+    # [3] Distance to the nearest pellet
+    if pelletList:
+        pelletDistances = [util.manhattanDist(pacmanPos, pellet) for pellet in pelletList]
+        nearestPelletDistance = min(pelletDistances)
+
+        if nearestPelletDistance <= CAPSULE_DIST_BOUND:
+            score += weights['distanceToPellet'] * nearestPelletDistance
+
+    return score
+
 
 # Abbreviation
 better = betterEvaluationFunction
