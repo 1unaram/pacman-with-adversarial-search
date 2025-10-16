@@ -308,6 +308,8 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         return optimalAction
 
 
+debug = False
+
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
       Your expectimax agent (question 4)
@@ -355,7 +357,7 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         legal moves.
         """
 
-        # Randomize legal actions
+        # Randomize legal actions to avoid bias back and forth
         legalActions = gameState.getLegalActions(0)
         random.shuffle(legalActions)
 
@@ -364,6 +366,8 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         optimalScore = NEG_INFINITY
         for action in legalActions:
             successor = gameState.generateSuccessor(0, action)
+            print(f"<{action[:2]}>: ", end="") if debug else None
+
 
             # Start expectimax from the first ghost at depth == self.depth
             score = self.expectimax(successor, self.depth, 1)
@@ -372,7 +376,11 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
                 optimalScore = score
                 optimalAction = action
 
+        print(f">>> Chosen action: {optimalAction} with score {optimalScore}") if debug else None
+
+
         return optimalAction
+
 
 
 def betterEvaluationFunction(currentGameState: GameState):
@@ -403,15 +411,14 @@ def betterEvaluationFunction(currentGameState: GameState):
     if currentGameState.isLose():
         return NEG_INFINITY
 
-    # Variables
     score = currentGameState.getScore()
     pacmanPos = currentGameState.getPacmanPosition()
     foodList = currentGameState.getFood().asList()
     ghostStates = currentGameState.getGhostStates()
     capsuleList = currentGameState.getCapsules()
 
-    # Weights
     GHOST_DIST_BOUND = 3
+
     weights = {
         'foodLeft': -10,
         'distanceToFood': 10,
@@ -419,7 +426,7 @@ def betterEvaluationFunction(currentGameState: GameState):
         'distanceToScaredGhost': 100,
         'distanceToCapsule': 30
     }
-
+    print('\t', end='') if debug else None
     # [2] Food
     if foodList:
         foodDistances = [util.manhattanDist(pacmanPos, food) for food in foodList]
@@ -427,9 +434,11 @@ def betterEvaluationFunction(currentGameState: GameState):
 
         # [2-1] Nearest food
         score += (weights['distanceToFood'] / (nearestFoodDistance + 1))
+        print(f"[Food] {weights['distanceToFood'] / (nearestFoodDistance + 1)} / ", end="") if debug else None
 
         # [2-2] Leftover food
         score += (weights['foodLeft'] * len(foodList))
+        print(f"[Food Left] {weights['foodLeft'] * len(foodList)} / ", end="") if debug else None
 
     # [3] Ghosts
     for ghost in ghostStates:
@@ -446,9 +455,11 @@ def betterEvaluationFunction(currentGameState: GameState):
             # [3-2-1] Dangerous state
             if ghostDistance <= GHOST_DIST_BOUND:
                 score += (weights['distanceToGhost'] / (ghostDistance + 1))
+                print(f"[Ghost] {weights['distanceToGhost'] / (ghostDistance + 1)} / ", end="") if debug else None
             # [3-2-2] Less dangerous state
             elif ghostDistance <= GHOST_DIST_BOUND + 2:
                 score += (0.7 * weights['distanceToGhost'] / (ghostDistance + 1))
+                print(f"[Ghost - Far] {0.5 * weights['distanceToGhost'] / (ghostDistance + 1)} / ", end="") if debug else None
 
     # [4] Capsules
     if capsuleList:
@@ -457,6 +468,9 @@ def betterEvaluationFunction(currentGameState: GameState):
 
         # [4-1] Go to capsule
         score += (weights['distanceToCapsule'] / (nearestCapsuleDistance + 1))
+        print(f"[Capsule] {weights['distanceToCapsule'] / (nearestCapsuleDistance + 1)} / ", end="") if debug else None
+
+    print(f"[Score] {score}") if debug else None
 
     return score
 
